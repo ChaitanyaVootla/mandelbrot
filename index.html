@@ -1,0 +1,217 @@
+<html>
+    <body>
+        <span>
+            <input type="number" value="0.285" id="juliax"/>
+            <input type="number" value="0.016" id="juliay"/>
+            <button onclick="drawSnap()">Show Snap</button>
+        </span>
+        <span class="info">
+            <button onclick="startDraw()">Start/Resume</button>
+            <button onclick="toggleDraw()">Pause</button>
+            <button onclick="stopDraw()">End</button>
+        </span>
+        <span class="info" id="info" style="float: right;">
+        </span>
+        </br>
+    </body>
+</html>
+
+<script>
+    var infoElement = document.getElementById('info');
+    var juliax = document.getElementById('juliax');
+    var juliay = document.getElementById('juliay');
+    juliax.addEventListener("keyup", function(event) {
+        if (event.keyCode === 13) {
+            drawSnap();
+        }
+    });
+    juliay.addEventListener("keyup", function(event) {
+        if (event.keyCode === 13) {
+            drawSnap();
+        }
+    });
+    var myCanvas = document.createElement("canvas");
+    // myCanvas.width=window.innerWidth - 20;
+    // myCanvas.height=window.innerHeight - 50;
+    myCanvas.width=800;
+    myCanvas.height=500;
+    var magnificationFactor = 200;
+    var increment = 0.001;
+    document.body.appendChild(myCanvas);
+    var ctx = myCanvas.getContext("2d");
+
+    var juliax = 0.285;
+    var juliay = 0;
+
+    function checkIfBelongsToMandelbrotSet(x, y) {
+        var realComponentOfResult = y;
+        var imaginaryComponentOfResult = x;
+        var iterations = 80;
+
+        for(var i = 0; i < iterations; i++) {
+            // Calculate the real and imaginary components of the result
+            // separately
+            var tempRealComponent = realComponentOfResult * realComponentOfResult
+                                    - imaginaryComponentOfResult * imaginaryComponentOfResult
+                                    + y;
+
+            var tempImaginaryComponent = 2 * realComponentOfResult * imaginaryComponentOfResult
+                                    + x;
+
+            realComponentOfResult = tempRealComponent;
+            imaginaryComponentOfResult = tempImaginaryComponent;
+            if (realComponentOfResult*imaginaryComponentOfResult >= 5)
+                return (i/iterations*100);
+        }
+
+        return 0;
+    }
+    function checkIfBelongsToJuliaSet(x, y) {
+        var realComponentOfResult = x;
+        var imaginaryComponentOfResult = y;
+        var iterations = 80;
+
+        for(var i = 0; i < iterations; i++) {
+            // Calculate the real and imaginary components of the result
+            // separately
+            var tempRealComponent = realComponentOfResult * realComponentOfResult
+                                    - imaginaryComponentOfResult * imaginaryComponentOfResult
+                                    + juliax;
+
+            var tempImaginaryComponent = 2 * realComponentOfResult * imaginaryComponentOfResult
+                                    + juliay;
+
+            realComponentOfResult = tempRealComponent;
+            imaginaryComponentOfResult = tempImaginaryComponent;
+            if (realComponentOfResult*imaginaryComponentOfResult >= 5)
+                return (i/iterations*100);
+        }
+
+        return 0;
+    }
+
+    var panX = myCanvas.width/(magnificationFactor*2);
+    var panY = myCanvas.height/(magnificationFactor*2);
+
+    var count = 1;
+
+    var drawInterval;
+
+    function startDraw() {
+        drawInterval = setInterval(
+            () => {
+                drawImage();
+                adjustJuliaValue();
+            }
+        );
+    }
+
+    function stopDraw() {
+        clearInterval(drawInterval);
+        juliax = -2;
+        juliay = -2;
+    }
+
+    function toggleDraw() {
+        clearInterval(drawInterval);
+    }
+
+    function drawSnap() {
+        setJuliaValues();
+        drawImage();
+    }
+    drawSnap();
+
+    function setJuliaValues() {
+        juliax = parseFloat(document.getElementById('juliax').value);
+        juliay = parseFloat(document.getElementById('juliay').value);
+    }
+
+    function adjustJuliaValue() {
+        juliax += increment;
+        juliay += increment;
+    }
+
+
+    function drawImage() {
+        var start = Date.now();
+        var fractalWorker = new Worker('./getFractalData.js');
+        fractalWorker.postMessage({
+            width: myCanvas.width,
+            height: myCanvas.height,
+            juliax,
+            juliay,
+            magnificationFactor,
+            panX,
+            panY,
+        })
+        fractalWorker.onmessage = ({data}) => {
+            // Draw data on canvas
+            for(var x=0; x < myCanvas.width; x++) {
+                for(var y=0; y < myCanvas.height; y++) {
+                    if(data[x][y] === 0) {
+                        ctx.fillStyle = 'black';
+                        ctx.fillRect(x,y, 1,1); // Draw a black pixel
+                    } else {
+                        ctx.fillStyle = `hsl(${data[x][y]*.8}, 100%, ${data[x][y]}%)`;
+                        ctx.fillRect(x,y, 1,1); // Draw a coloured pixel
+                    }
+                }
+            }
+            // Update info
+            infoElement.innerText = Date.now() - start + 'ms ' + 'X = ' + juliax + ' Y = ' + juliay;
+            fractalWorker.terminate();
+            // adjustJuliaValue();
+            // drawImage();
+        }
+    }
+
+    function drawImage2() {
+        var start = Date.now();
+
+        var data = new Array(myCanvas.width);
+        for(var x=0; x < myCanvas.width; x++) {
+            data[x] = new Array(myCanvas.height);
+        }
+
+        for(var x=0; x < myCanvas.width; x++) {
+            for(var y=0; y < myCanvas.height; y++) {
+                data[x][y] = 
+                checkIfBelongsToJuliaSet(x/magnificationFactor - panX,
+                                                    y/magnificationFactor - panY);;
+            }
+        }
+        for(var x=0; x < myCanvas.width; x++) {
+            for(var y=0; y < myCanvas.height; y++) {
+                if(data[x][y] === 0) {
+                    ctx.fillStyle = 'black';
+                    ctx.fillRect(x,y, 1,1); // Draw a black pixel
+                } else {
+                    ctx.fillStyle = `hsl(${data[x][y]*.8}, 100%, ${data[x][y]}%)`;
+                    ctx.fillRect(x,y, 1,1); // Draw a coloured pixel
+                }
+            }
+        }
+        infoElement.innerText = Date.now() - start + 'ms ' + 'X = ' + juliax + ' Y = ' + juliay;
+    }
+</script>
+
+<style>
+    button {
+        font-size: 1em;
+    }
+    input {
+        font-size: 1em;
+    }
+    .info {
+        padding-left: 2em;
+    }
+    canvas {
+        margin-top: 0.5em;
+        border: gray 1px solid;
+    }
+    body {
+        background: black;
+        color: white;
+    }
+</style>
